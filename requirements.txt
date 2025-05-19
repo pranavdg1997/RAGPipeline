@@ -1,0 +1,16 @@
+email-validator>=2.2.0
+flask>=3.1.1
+flask-sqlalchemy>=3.1.1
+gpt-index>=0.8.42
+groq>=0.25.0
+gunicorn>=23.0.0
+langchain-community>=0.3.24
+llama-index==0.8.11
+llama-index-core>=0.12.36
+llama-index-llms-groq>=0.3.1
+numpy>=2.2.6
+openai>=1.79.0
+psycopg2-binary>=2.9.10
+pytest>=8.3.5
+pytest-mock>=3.14.0
+python-dotenv>=1.1.0

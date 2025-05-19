@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Document QA System</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        .form-floating {
+            margin-bottom: 1rem;
+        }
+        #documentText {
+            height: 300px;
+        }
+        #queryText {
+            height: 100px;
+        }
+        #response {
+            white-space: pre-wrap;
+        }
+        .loading {
+            display: inline-block;
+            width: 1.5rem;
+            height: 1.5rem;
+            vertical-align: text-bottom;
+            border: 0.2em solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spinner 0.75s linear infinite;
+        }
+        @keyframes spinner {
+            to {transform: rotate(360deg);}
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">RAG Document QA System</h1>
+        
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title">Document Input</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="documentForm">
+                            <div class="form-floating mb-3">
+                                <select class="form-select mb-3" id="providerSelect">
+                                    <option value="openai" selected>OpenAI</option>
+                                    <option value="azure">Azure OpenAI</option>
+                                    <option value="groq">Groq</option>
+                                </select>
+                                <label for="providerSelect">AI Provider</label>
+                            </div>
+                            
+                            <!-- Provider Status Alerts -->
+                            <div id="providerStatusAlerts"></div>
+                            
+                            <div class="form-floating mb-3">
+                                <textarea class="form-control" id="documentText" placeholder="Enter document text here"></textarea>
+                                <label for="documentText">Document Text</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="initializeBtn">
+                                Initialize RAG System
+                                <span class="loading d-none" id="initLoading"></span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title">Document Stats</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="statsDisplay">
+                            <p class="text-muted">Initialize the RAG system to see document statistics</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title">Ask a Question</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="queryForm">
+                            <div class="form-floating mb-3">
+                                <textarea class="form-control" id="queryText" placeholder="Ask a question about the document"></textarea>
+                                <label for="queryText">Your Question</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="queryBtn" disabled>
+                                Submit Question
+                                <span class="loading d-none" id="queryLoading"></span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Answer</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="responseContainer">
+                            <p class="text-muted">Ask a question to see the answer</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Fill with default document text
+            const defaultDocument = `# Artificial Intelligence
+
+Artificial intelligence (AI) is intelligence demonstrated by machines, as opposed to human or animal intelligence. 
+"AI" may also refer to the field of science concerned with building artificial intelligence systems.
+
+## Types of AI
+
+AI can be categorized as either weak AI or strong AI:
+
+1. **Weak AI** (also called narrow AI) is designed and trained to complete a specific task. Industrial robots and virtual personal assistants, such as Apple's Siri, use weak AI.
+
+2. **Strong AI** (or artificial general intelligence) is a theoretical type of AI where the machine would have an intelligence equal to humans; it would have a self-aware consciousness with the ability to solve problems, learn, and plan for the future.
+
+## Machine Learning
+
+Machine learning (ML) is the scientific study of algorithms and statistical models that computer systems use to perform specific tasks without explicit instructions, relying on patterns and inference instead. It is seen as a subset of artificial intelligence.
+
+### Deep Learning
+
+Deep learning is part of a broader family of machine learning methods based on artificial neural networks with representation learning. Learning can be supervised, semi-supervised or unsupervised.`;
+            
+            document.getElementById('documentText').value = defaultDocument;
+            
+            // Check provider status on load and when provider changes
+            checkProviderStatus();
+            document.getElementById('providerSelect').addEventListener('change', checkProviderStatus);
+            
+            // Initialize form
+            document.getElementById('documentForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const initBtn = document.getElementById('initializeBtn');
+                const loadingSpinner = document.getElementById('initLoading');
+                const selectedProvider = document.getElementById('providerSelect').value;
+                
+                initBtn.disabled = true;
+                loadingSpinner.classList.remove('d-none');
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('document_text', document.getElementById('documentText').value);
+                    formData.append('provider', selectedProvider);
+                    
+                    const response = await fetch('/initialize', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        document.getElementById('queryBtn').disabled = false;
+                        displayStats(data.stats);
+                        showAlert('success', `RAG system initialized successfully with ${selectedProvider}`);
+                    } else {
+                        showAlert('danger', data.message);
+                    }
+                } catch (error) {
+                    showAlert('danger', 'Error: ' + error.message);
+                } finally {
+                    initBtn.disabled = false;
+                    loadingSpinner.classList.add('d-none');
+                }
+            });
+            
+            // Query form
+            document.getElementById('queryForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const queryBtn = document.getElementById('queryBtn');
+                const loadingSpinner = document.getElementById('queryLoading');
+                
+                queryBtn.disabled = true;
+                loadingSpinner.classList.remove('d-none');
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('query_text', document.getElementById('queryText').value);
+                    
+                    const response = await fetch('/query', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        displayResponse(data.response);
+                    } else {
+                        showAlert('danger', data.message);
+                    }
+                } catch (error) {
+                    showAlert('danger', 'Error: ' + error.message);
+                } finally {
+                    queryBtn.disabled = false;
+                    loadingSpinner.classList.add('d-none');
+                }
+            });
+        });
+        
+        // Check if the required API keys are available for the selected provider
+        async function checkProviderStatus() {
+            try {
+                const selectedProvider = document.getElementById('providerSelect').value;
+                const response = await fetch('/provider_status');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const providers = data.providers;
+                    const alertsContainer = document.getElementById('providerStatusAlerts');
+                    
+                    // Clear previous alerts
+                    alertsContainer.innerHTML = '';
+                    
+                    // Show alert for the selected provider
+                    if (providers[selectedProvider]) {
+                        if (providers[selectedProvider].available) {
+                            alertsContainer.innerHTML = `
+                                <div class="alert alert-success" role="alert">
+                                    <small>${selectedProvider.toUpperCase()} API credentials found.</small>
+                                </div>
+                            `;
+                        } else {
+                            const requiredEnv = providers[selectedProvider].required_env.join(', ');
+                            alertsContainer.innerHTML = `
+                                <div class="alert alert-warning" role="alert">
+                                    <small>${selectedProvider.toUpperCase()} API credentials not found. Please set the required environment variables: ${requiredEnv}</small>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking provider status:', error);
+            }
+        }
+        
+        function displayStats(stats) {
+            const statsContainer = document.getElementById('statsDisplay');
+            
+            // Build list of stats
+            let statsList = `
+                <div class="list-group">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Provider <span class="badge bg-primary">${stats.provider}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Model <span class="badge bg-primary">${stats.model}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Embedding Model <span class="badge bg-primary">${stats.embedding_model}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Chunks <span class="badge bg-primary">${stats.total_chunks}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Text Length <span class="badge bg-primary">${stats.total_text_length}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Average Chunk Size <span class="badge bg-primary">${Math.round(stats.avg_chunk_size)}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Chunk Size <span class="badge bg-primary">${stats.chunk_size}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Chunk Overlap <span class="badge bg-primary">${stats.chunk_overlap}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        Embedded Chunks <span class="badge bg-primary">${stats.embedded_chunks}</span>
+                    </div>
+                </div>
+            `;
+            
+            statsContainer.innerHTML = statsList;
+        }
+        
+        function displayResponse(response) {
+            const container = document.getElementById('responseContainer');
+            container.innerHTML = `<div class="alert alert-secondary" id="response">${response}</div>`;
+        }
+        
+        function showAlert(type, message) {
+            const alertHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            // Insert at top of page
+            const container = document.querySelector('.container');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = alertHTML;
+            container.insertBefore(tempDiv.firstChild, container.firstChild);
+            
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                const alert = document.querySelector('.alert');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
